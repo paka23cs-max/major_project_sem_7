@@ -1,0 +1,15 @@
+{
+  "cnn_threshold": 0.0022569408174604177,
+  "temporal_threshold": 0.007961087860167027,
+  "interpolation_threshold": 0.000452878070063889,
+  "acceleration_threshold": 0.001811512280255556,
+  "hybrid_threshold": 1.3949770103762924,
+  "cnn_mean": 0.0020806441739401886,
+  "cnn_std": 0.00011389671395315217,
+  "temporal_mean": 0.005265559245112114,
+  "temporal_std": 0.0016143898712644037,
+  "hybrid_alpha": 0.5,
+  "hybrid_beta": 0.5,
+  "sequence_length": 9,
+  "latent_dim": 256
+}
