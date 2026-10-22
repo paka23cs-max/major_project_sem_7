@@ -1,9 +1,11 @@
-# Python
+# Python cache and compiled files
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
+
+# Build artifacts and package files
 build/
 develop-eggs/
 dist/
@@ -24,52 +26,59 @@ wheels/
 venv/
 env/
 ENV/
-.venv
+.venv/
 
-# PyTorch model files (too large for git, use Git LFS or external storage)
-outputs/trained_model.pth
-outputs/*.pth
+# Model weights: ignore by default, explicitly include required inference models
 *.pth
+!outputs/
+outputs/*
+!outputs/trained_model.pth
+!outputs/temporal_transformer.pth
+!outputs/model.onnx
+!outputs/model.onnx.data
+!outputs/calibration_stats.json
+!outputs/model.json
+!outputs/model_registry.json
 
-# Training artifacts
+# Exclude generated evaluation artifacts
 outputs/*.npy
 outputs/*.txt
 outputs/*.log
+outputs/*.png
+outputs/slide_visuals/
+outputs/demo_samples/
 
 # Jupyter Notebook
-.ipynb_checkpoints
+.ipynb_checkpoints/
 *.ipynb
 
-# Environment variables
+# Secrets and environment variables
 .env
-.env.local
+.env.*
+!.env.example
+.streamlit/secrets.toml
 
-# VS Code
+# IDE files
 .vscode/
 *.code-workspace
-
-# IDEs
 .idea/
 *.swp
 *.swo
 *~
 
-# OS
+# Operating system files
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# Video files (too large for git)
+# Video files: users upload their own videos
 *.mp4
 *.avi
 *.mov
 *.mkv
 *.flv
 *.wmv
-test_videos/*.mp4
-test_videos/*.avi
-cctv_samples/*.mp4
-cctv_samples/*.avi
+*.webm
 
 # Temporary files
 temp/
@@ -77,51 +86,33 @@ tmp/
 *.tmp
 *.temp
 
-# Static files directory (if used for uploads)
-static/
-
-# Streamlit
-.streamlit/secrets.toml
+# Streamlit cache
 .streamlit/cache/
 
 # Logs
 logs/
 *.log
 
-# Data directories (download separately)
+# Training datasets: download separately if needed
 data/ped2/
 data/ucsd/
 data/raw/
 data/processed/
 
-# Test outputs
+# Test and generated results
 test_outputs/
 results/
-
-# Coverage reports
+.pytest_cache/
 htmlcov/
 .coverage
 .coverage.*
 coverage.xml
 
-# pytest cache
-.pytest_cache/
-
-# MyPy
+# Type checking cache
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Screenshots and demo media
-Screenshot*.png
-demo_*.mp4
-sample_*.mp4
-
-# Deployment
+# Deployment runtime artifacts
 *.pid
 *.sock
-
-# Documentations
-PROJECT_STRUCTURE.md
-UPGRADE_PLAN.md
-DEPLOYMENT_CHECKLIST.md
