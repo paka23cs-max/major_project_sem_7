@@ -1,7 +1,7 @@
 
 # ==========================================
-# Stage 1: Builder
-# Install dependencies and build environment
+# STAGE 1: BUILDER
+# Install dependencies and prepare environment
 # ==========================================
 
 FROM python:3.11-slim AS builder
@@ -11,28 +11,36 @@ WORKDIR /build
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements
+# Copy requirements first for Docker layer caching
 COPY requirements.txt .
 
-# Create virtual environment
+# Create isolated Python environment
 RUN python -m venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Install Python dependencies
-RUN pip install --no-cache-dir --upgrade pip wheel \
-    && pip install --no-cache-dir -r requirements.txt
+# Upgrade pip and wheel
+RUN pip install --no-cache-dir --upgrade pip wheel
+
+# Install CPU-only PyTorch and Torchvision
+RUN pip install --no-cache-dir \
+    torch torchvision \
+    --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining production dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
 
 # ==========================================
-# Stage 2: Runtime
-# Minimal production image
+# STAGE 2: RUNTIME
+# Minimal production environment
 # ==========================================
 
 FROM python:3.11-slim AS runtime
+
+WORKDIR /app
 
 # Create non-root user for security
 ARG UID=1000
@@ -40,8 +48,6 @@ ARG GID=1000
 
 RUN groupadd -g ${GID} appgroup \
     && useradd -m -u ${UID} -g appgroup -s /bin/bash appuser
-
-WORKDIR /app
 
 # Install runtime system dependencies
 # libgl1 replaces the unavailable libgl1-mesa-glx
@@ -59,7 +65,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy virtual environment from builder
+# Copy installed Python environment from builder
 COPY --from=builder /opt/venv /opt/venv
 
 ENV PATH="/opt/venv/bin:$PATH"
@@ -77,10 +83,10 @@ COPY --chown=appuser:appgroup app.py .
 RUN mkdir -p outputs static temp logs \
     && chown -R appuser:appgroup /app
 
-# Copy trained model and outputs
+# Copy trained model and output files
 COPY --chown=appuser:appgroup outputs/ ./outputs/
 
-# Switch to non-root user
+# Run application as non-root user
 USER appuser
 
 # Environment configuration
@@ -104,31 +110,32 @@ CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "
 
 
 # ==========================================
-# Stage 3: Development
-# Development environment with tooling
+# STAGE 3: DEVELOPMENT
+# Additional development and testing tools
 # ==========================================
 
 FROM runtime AS development
 
 USER root
 
-# Install development tools
+# Install development system tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install development Python packages
+# Install development Python dependencies
 RUN pip install --no-cache-dir \
     pytest \
     pytest-asyncio \
     httpx \
     black \
     flake8 \
-    mypy
+    mypy \
+    onnx
 
 # Switch back to non-root user
 USER appuser
 
-# Development server with auto-reload
+# Development server with automatic reload
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
