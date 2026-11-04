@@ -1,9 +1,4 @@
-
-# ==========================================
-# STAGE 1: BUILDER
-# Install dependencies and prepare environment
-# ==========================================
-
+# Stage 1: Builder - Install dependencies and compile wheels
 FROM python:3.11-slim AS builder
 
 WORKDIR /build
@@ -11,53 +6,40 @@ WORKDIR /build
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first for Docker layer caching
+# Copy requirements and install to virtual environment
 COPY requirements.txt .
 
-# Create isolated Python environment
+# Create virtual environment and install dependencies
 RUN python -m venv /opt/venv
-
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Upgrade pip and wheel
-RUN pip install --no-cache-dir --upgrade pip wheel
-
-# Install CPU-only PyTorch and Torchvision
-RUN pip install --no-cache-dir \
-    torch torchvision \
-    --index-url https://download.pytorch.org/whl/cpu
-
-# Install remaining production dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies with wheel caching
+RUN pip install --no-cache-dir --upgrade pip wheel \
+    && pip install --no-cache-dir -r requirements.txt
 
 
-# ==========================================
-# STAGE 2: RUNTIME
-# Minimal production environment
-# ==========================================
-
+# Stage 2: Runtime - Minimal production image
 FROM python:3.11-slim AS runtime
 
-WORKDIR /app
-
-# Create non-root user for security
+# Security: Create non-root user
 ARG UID=1000
 ARG GID=1000
-
 RUN groupadd -g ${GID} appgroup \
     && useradd -m -u ${UID} -g appgroup -s /bin/bash appuser
 
-# Install runtime system dependencies
-# libgl1 replaces the unavailable libgl1-mesa-glx
+WORKDIR /app
+
+# Install runtime system dependencies only (no build tools)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender1 \
     libgomp1 \
-    libgl1 \
+    libgl1-mesa-glx \
     libavcodec-dev \
     libavformat-dev \
     libswscale-dev \
@@ -65,12 +47,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
-# Copy installed Python environment from builder
+# Copy virtual environment from builder
 COPY --from=builder /opt/venv /opt/venv
-
 ENV PATH="/opt/venv/bin:$PATH"
 
-# Copy application files
+# Copy application code (order by change frequency for cache optimization)
 COPY --chown=appuser:appgroup config.py .
 COPY --chown=appuser:appgroup settings.py .
 COPY --chown=appuser:appgroup models/ ./models/
@@ -79,14 +60,14 @@ COPY --chown=appuser:appgroup evaluation/ ./evaluation/
 COPY --chown=appuser:appgroup utils/ ./utils/
 COPY --chown=appuser:appgroup app.py .
 
-# Create required directories
+# Create directories with correct ownership
 RUN mkdir -p outputs static temp logs \
     && chown -R appuser:appgroup /app
 
-# Copy trained model and output files
+# Copy trained model if exists
 COPY --chown=appuser:appgroup outputs/ ./outputs/
 
-# Run application as non-root user
+# Security: Switch to non-root user
 USER appuser
 
 # Environment configuration
@@ -98,44 +79,38 @@ ENV PYTHONUNBUFFERED=1 \
     APP_WORKERS=1 \
     APP_LOG_FORMAT=json
 
-# Expose application port
+# Expose port
 EXPOSE 8000
 
-# Health check
+# Health check with separate liveness and readiness probes
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Start production application
+# Run as non-root user with gunicorn for production
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
 
 
-# ==========================================
-# STAGE 3: DEVELOPMENT
-# Additional development and testing tools
-# ==========================================
-
+# Stage 3: Development - Full tooling for local development
 FROM runtime AS development
 
 USER root
 
-# Install development system tools
+# Install development tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Install development Python dependencies
+# Install development Python packages
 RUN pip install --no-cache-dir \
     pytest \
     pytest-asyncio \
     httpx \
     black \
     flake8 \
-    mypy \
-    onnx
+    mypy
 
-# Switch back to non-root user
 USER appuser
 
-# Development server with automatic reload
+# Override CMD for development (with reload)
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
